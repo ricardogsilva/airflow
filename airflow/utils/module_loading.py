@@ -52,3 +52,73 @@ def import_string(dotted_path):
         raise ImportError('Module "{}" does not define a "{}" attribute/class'.format(
             module_path, class_name)
         )
+
+# TODO: Make sure not to use any python3 exclusive stuff, such as f-strings, or pathlib
+
+def lazy_import(path: str):
+    """Import a python named object dynamically.
+
+    This function is used mainly in operators that derive from PythonOperator.
+
+    Parameters
+    ----------
+    path: str
+        Path to import. It can be either:
+
+         -  a python class path, like `airflow.utils.module_loading.lazy_import`
+         -  a filesystem path like `~/processes/callbacks.py:process_stuff`
+
+    """
+
+    try:
+        python_name = _lazy_import_filesystem_path(path)
+    except ImportError:
+        python_name = _lazy_import_filesystem_path(path, assume_package=True)
+    except (RuntimeError, KeyError):
+        python_name = import_string(path)
+    return python_name
+
+
+def _lazy_import_filesystem_path(path:str, assume_package: bool=False):
+    """Lazily import a python name from a filesystem path
+
+    This function attempts to import the input ``path`` by assuming it is
+    part of a python package. This is useful for those cases where the code
+    in ``path`` uses relative imports.
+
+    Parameters
+    ----------
+    path: str
+        A colon separated string with the path to the module to load and the
+        name of the object to import
+
+    Returns
+    -------
+    The imported object
+
+    Raises
+    ------
+    KeyError
+        If the name is not found on the loaded python module
+    RuntimeError
+        If the path is not valid
+
+    """
+
+    filesystem_path, python_name = path.rpartition(":")[::2]
+    full_path = os.path.abspath(os.path.expanduser(filesystem_path))
+    if os.path.isfile(full_path):
+        module_dir_path, module_filename = os.path.split(full_path)
+        module_name = os.path.splitext(module_filename)[0]
+        if assume_package:
+            module_dir_ancestor_path = os.path.split(module_dir_path)
+            sys.path.append(module_dir_ancestor_path)
+        else:
+            sys.path.append(module_dir_path)
+        loaded_module = import_module("{}.{}".format(
+            os.path.basename(module_dir_path),
+            module_name)
+        )
+        return loaded_module.__dict__.get(python_name)
+    else:
+        raise RuntimeError(f"Invalid path {full_path}")

@@ -17,8 +17,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from importlib import import_module
 import inspect
 import os
+from pathlib import Path
 import pickle
 import subprocess
 import sys
@@ -34,6 +36,7 @@ from airflow.models import BaseOperator
 from airflow.models.skipmixin import SkipMixin
 from airflow.utils.decorators import apply_defaults
 from airflow.utils.file import TemporaryDirectory
+from airflow.utils.module_loading import lazy_import
 from airflow.utils.operator_helpers import context_to_airflow_vars
 
 
@@ -87,8 +90,6 @@ class PythonOperator(BaseOperator):
             templates_exts=None,
             *args, **kwargs):
         super(PythonOperator, self).__init__(*args, **kwargs)
-        if not callable(python_callable):
-            raise AirflowException('`python_callable` param must be callable')
         self.python_callable = python_callable
         self.op_args = op_args or []
         self.op_kwargs = op_kwargs or {}
@@ -110,12 +111,26 @@ class PythonOperator(BaseOperator):
             context['templates_dict'] = self.templates_dict
             self.op_kwargs = context
 
-        return_value = self.execute_callable()
+        return_value = self.execute_callable(context)
         self.log.info("Done. Returned value was: %s", return_value)
         return return_value
 
-    def execute_callable(self):
-        return self.python_callable(*self.op_args, **self.op_kwargs)
+    # TODO: Make sure not to use any python3 exclusive stuff, such as f-strings, or pathlib
+    def execute_callable(self, context):
+        if callable(self.python_callable):
+            handler = self.python_callable
+            self.log.info("python_callable is callable")
+        else:
+            self.log.info(
+                "python_callable is not callable. Importing python object...")
+            rendered_callable_path = self.render_template_from_field(
+                attr=None,
+                content=self.python_callable,
+                context=context,
+                jinja_env=self.get_template_env()
+            )
+            handler = lazy_import(rendered_callable_path)
+        return handler(*self.op_args, **self.op_kwargs)
 
 
 class BranchPythonOperator(PythonOperator, SkipMixin):
