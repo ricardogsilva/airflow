@@ -17,19 +17,43 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import mock
 import unittest
 
-from airflow.utils.module_loading import import_string
+from airflow.utils import module_loading
 
 
 class ModuleImportTestCase(unittest.TestCase):
+
     def test_import_string(self):
-        cls = import_string('airflow.utils.module_loading.import_string')
-        self.assertEqual(cls, import_string)
+        cls = module_loading.import_string('airflow.utils.module_loading.import_string')
+        self.assertEqual(cls, module_loading.import_string)
 
         # Test exceptions raised
         with self.assertRaises(ImportError):
-            import_string('no_dots_in_path')
+            module_loading.import_string('no_dots_in_path')
         msg = 'Module "airflow.utils" does not define a "nonexistent" attribute'
         with self.assertRaisesRegexp(ImportError, msg):
-            import_string('airflow.utils.nonexistent')
+            module_loading.import_string('airflow.utils.nonexistent')
+
+    @mock.patch('airflow.utils.module_loading.import_module')
+    @mock.patch('airflow.utils.module_loading.os')
+    @mock.patch('airflow.utils.module_loading.sys')
+    def test_lazy_import_file_system_path(
+            self, patched_import_module, patched_os, patched_sys):
+        fake_dir = "/some/dummy/path"
+        fake_module_name = "fakemodule"
+        fake_module = "{}.py".format(fake_module_name)
+        fake_func_name = "phony_func"
+        fake_path = "{}/{}:{}".format(fake_dir, fake_module, fake_func_name)
+        fake_callable = "hi, I'm a fake callable"
+        patched_os.abspath.return_value = fake_path
+        patched_os.expanduser.return_value = fake_path
+        patched_os.isfile.return_value = True
+        patched_os.split.return_value = (
+            fake_dir, "{}:{}".format(fake_module, fake_func_name))
+        patched_os.splitext.return_value = (fake_module_name, ".py")
+        patched_import_module.return_value = mock.MagickMock(
+            __dict__={fake_func_name: fake_callable})
+        result = module_loading.lazy_import(fake_path)
+        self.assertEquals(result, fake_callable)

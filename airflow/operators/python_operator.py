@@ -17,10 +17,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from importlib import import_module
 import inspect
 import os
-from pathlib import Path
 import pickle
 import subprocess
 import sys
@@ -115,21 +113,25 @@ class PythonOperator(BaseOperator):
         self.log.info("Done. Returned value was: %s", return_value)
         return return_value
 
-    # TODO: Make sure not to use any python3 exclusive stuff, such as f-strings, or pathlib
     def execute_callable(self, context):
         if callable(self.python_callable):
             handler = self.python_callable
             self.log.info("python_callable is callable")
         else:
             self.log.info(
-                "python_callable is not callable. Importing python object...")
+                "python_callable is not callable. Templating and importing "
+                "python object from python_callable..."
+            )
             rendered_callable_path = self.render_template_from_field(
                 attr=None,
                 content=self.python_callable,
                 context=context,
                 jinja_env=self.get_template_env()
             )
+            self.log.debug(
+                "rendered_callable_path: {}".format(rendered_callable_path))
             handler = lazy_import(rendered_callable_path)
+            self.log.debug("handler: {}".format(handler))
         return handler(*self.op_args, **self.op_kwargs)
 
 

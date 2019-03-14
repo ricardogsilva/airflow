@@ -79,12 +79,13 @@ def lazy_import(path: str):
     return python_name
 
 
-def _lazy_import_filesystem_path(path:str, assume_package: bool=False):
+# FIXME: Documentation format used in airflow is not numpy-style
+def _lazy_import_filesystem_path(path: str, assume_package: bool=False):
     """Lazily import a python name from a filesystem path
 
-    This function attempts to import the input ``path`` by assuming it is
-    part of a python package. This is useful for those cases where the code
-    in ``path`` uses relative imports.
+    Depending on the value of ``assume_package``, this function may attempt to
+    import the input ``path`` by assuming it is part of a python package. This
+    is useful for those cases where the code in ``path`` uses relative imports.
 
     Parameters
     ----------
@@ -121,4 +122,4 @@ def _lazy_import_filesystem_path(path:str, assume_package: bool=False):
         )
         return loaded_module.__dict__.get(python_name)
     else:
-        raise RuntimeError(f"Invalid path {full_path}")
+        raise RuntimeError("Invalid path {}".format(full_path))
